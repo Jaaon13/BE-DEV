@@ -1,212 +1,386 @@
 package projects;
 
 import java.math.BigDecimal;
+import java.time.LocalTime;
 import java.util.List;
 import java.util.Objects;
 import java.util.Scanner;
 
-import projects.entity.Project;
-import projects.service.projectService;
+import projects.entity.Category;
+import projects.entity.Ingredient;
+import projects.entity.Recipe;
+import projects.entity.Step;
+import projects.entity.Unit;
+import projects.exception.DbException;
+import projects.service.RecipeService;
 
 public class app {
 	
-	private static boolean done = false;
+	private Scanner s = new Scanner(System.in);
+	private RecipeService rp = new RecipeService();
+	private Recipe currecipe;
 	
-	private Scanner sc = new Scanner(System.in);
-	private Project curProject;
-	
-	private projectService ps = new projectService();
-	
-	private List<String> ops = List.of (
-			"1. Add a Project",
-			"2. List Projects",
-			"3. Select Project",
-			"4. Update Project Details",
-			"5. Delete Project"
+	//@formatter:off
+	private List<String> operations = List.of(
+			"1) Create and populate all tables",
+			"2) Add a Recipe",
+			"3) List Recipes",
+			"4) Select a Recipe",
+			"5) Add Ingredient to Current Recipe",
+			"6) Add Step to Current Recipe",
+			"7) Add Category to Current Recipe",
+			"8) Modify Step in Current Recipe",
+			"9) Delete Recipe"
 			);
-
+	//@formatter:on
+	
 	public static void main(String[] args) {
 		
-		app app = new app();
+		new app().displayMenu();
+
+	}
+	
+	private void displayMenu() {
+		
+		boolean done = false;
 		
 		while(!done) {
-			app.displayMenu();
+			
+			try {
+				int sel = getOperation();
+				
+				switch(sel) {
+				case -1:
+					done = exitMenu();
+					break;
+				
+				case 1:
+					createTables();
+					break;
+					
+				case 2:
+					addRecipe();
+					break;
+					
+				case 3:
+					listRecipes();
+					break;
+					
+				case 4:
+					selectRecipe();					
+					break;
+					
+				case 5:
+					addIngredient();
+					break;
+					
+				case 6:
+					addStep();
+					break;
+					
+				case 7:
+					addCategory();
+					break;
+					
+				case 8:
+					updateStep();
+					break;
+					
+				case 9:
+					deleteRecipe();
+					break;
+					
+				default:
+					System.out.println("\n" + sel + " is not valid try again!");
+					break;
+				}
+			} catch (Exception e) {
+				System.out.println("\nError: " + e.toString() + "\nTry Again");
+			}
+			
 		}
-
+		
 	}
 	
-	public void displayMenu() {
-		ops.forEach(line -> System.out.println(line));
+	private void deleteRecipe() {
+		
+		listRecipes();
+		
+		Integer Id = getIntInput("Enter the Recipe ID to Delete");
+		
+		if(Objects.nonNull(Id)) {
+			
+			System.out.println(rp.deleteRecipe(Id));
+			
+			if(Objects.nonNull(currecipe) && currecipe.getRecipe_id().equals(Id)) {
+				currecipe = null;
+			}
+			
+		}
+		
+	}
+
+	private void updateStep() {
+		
+		if(Objects.isNull(currecipe)) {
+			System.out.println("\nSelect Recipe First!");
+			return;
+		}
+		
+		List<Step> s = rp.fetchSteps(currecipe.getRecipe_id());
+		
+		System.out.println("\nSteps in Current Recipe");
+		
+		s.forEach(step -> System.out.println(step));
+		
+		Integer stepId = getIntInput("Enter Id of Step to Modify");
+		
+		if(Objects.nonNull(stepId)) {
+			
+			String stepText = getStringInput("Enter New Step Text: ");
+			
+			if(Objects.nonNull(stepText)) {
+				
+				Step ns = new Step();
+				
+				ns.setStepId(stepId);
+				ns.setStepText(stepText);
+				
+				rp.modifyStep(ns);
+				
+				currecipe = rp.fetchRecipeByID(currecipe.getRecipe_id());
+				
+			}
+			
+		}
+		
+	}
+
+	private void addCategory() {
+		
+		if(Objects.isNull(currecipe)) {
+			System.out.println("\nSelect Recipe First!");
+			return;
+		}
+		
+		List<Category> c = rp.fetchCategories();
+		
+		c.forEach(cs -> System.out.println(cs.getCategoryName()));
+		
+		String category = getStringInput("Enter Category To Add");
+		
+		if(Objects.nonNull(category)) {
+			rp.addCategory(currecipe.getRecipe_id(), category);
+			currecipe = rp.fetchRecipeByID(currecipe.getRecipe_id());
+		}
+		
+	}
+
+	private void addStep() {
+		
+		if(Objects.isNull(currecipe)) {
+			System.out.println("\nSelect Recipe First!");
+			return;
+		}
+		
+		String stepText = getStringInput("Enter step text:");
+		
+		if(Objects.nonNull(stepText)) {
+			
+			Step s = new Step();
+			
+			s.setRecipeId(currecipe.getRecipe_id());
+			s.setStepText(stepText);
+			
+			rp.addStep(s);
+			
+			currecipe = rp.fetchRecipeByID(s.getRecipeId());
+			
+		}
+		
+	}
+
+	private void addIngredient() {
+		
+		if(Objects.isNull(currecipe)) {
+			System.out.println("\nSelect Recipe First!");
+			return;
+		}
+		
+		String name = getStringInput("Enter the ingredient name: ");
+		String instruction = getStringInput("Enter the instruction (if any): ");
+		Double inpamount = getDoubleInput("Enter the ingredient amount: ");
+		
+		List<Unit> units = rp.fetchUnits();
+		
+		BigDecimal amount = Objects.isNull(inpamount) ? null : new BigDecimal(inpamount).setScale(2);
+		
+		System.out.println("Units:");
+		
+		units.forEach(unit -> System.out.println(unit.getUnitId() + ". "
+		+ unit.getUnitNameSingular() + " (" + unit.getUnitNamePlural() + ")"));
+		
+		Integer unitId = getIntInput("Enter a unit ID (Enter to escape): ");
+		
+		Unit u = new Unit();
+		u.setUnitId(unitId);
+		
+		Ingredient i = new Ingredient();
+		i.setRecipeId(currecipe.getRecipe_id());
+		i.setUnit(u);
+		i.setIngredientName(name);
+		i.setInstruction(instruction);
+		i.setAmount(amount);
+		
+		rp.addIngredient(i);
+		
+		currecipe = rp.fetchRecipeByID(i.getRecipeId());
+		
+	}
+
+	private void selectRecipe() {
+		
+		List<Recipe> r = listRecipes();
+		
+		Integer id = getIntInput("Select a Recipe Id");
+		
+		currecipe = null;
+		
+		for(Recipe re : r) {
+			if(re.getRecipe_id().equals(id)) {
+				currecipe = rp.fetchRecipeByID(id);
+				break;
+			}
+		}
+		
+		if(Objects.isNull(currecipe)) {
+			System.out.println("Error / Invalid id");
+		} else {
+			String s = currecipe.toString();
+			System.out.println(s);
+		}
+		
+	}
+
+	private List<Recipe> listRecipes() {
+		
+		 List<Recipe> r = rp.fetchRecipes();
+		
+		System.out.println("\nRecipes");
+		
+		r.forEach(rd -> System.out.println("" + rd.getRecipe_id() + ": " + rd.getRecipeName()));
+		
+		return r;
+		
+	}
+
+	private void addRecipe() {
+		
+		String name = getStringInput("Enter Recipe Name: ");
+		String notes = getStringInput("Enter Recipe Notes: ");
+		Integer numofServing = getIntInput("Enter Number of Servings: ");
+		Integer prepMin = getIntInput("Enter Prep Time(minutes):");
+		Integer cookMin = getIntInput("Enter Cook Time(minutes):");
+		
+		LocalTime prepTime = minToLocalTime(prepMin);
+		LocalTime cookTime = minToLocalTime(cookMin);
+		
+		Recipe recipe = new Recipe();
+		
+		recipe.setRecipeName(name);
+		recipe.setNotes(notes);
+		recipe.setNumServings(numofServing);
+		recipe.setPrepTime(prepTime);
+		recipe.setCookTime(cookTime);
+		
+		Recipe dbR = rp.addRecipe(recipe);
+		System.out.println("You added this recipe:\n"+dbR);
+		
+		currecipe = rp.fetchRecipeByID(dbR.getRecipe_id());
+		
+	}
+
+	private LocalTime minToLocalTime(Integer numMin) {
+		
+		int min = Objects.isNull(numMin) ? 0 : numMin;
+		int hours = min/60;
+		int minutes = min&60;
+		
+		return LocalTime.of(hours, minutes);
+		
+	}
+
+	private void createTables() {
+		
+		rp.createAndPopulateTables();
+		System.out.println("\nTables Created");
+		
+	}
+
+	private boolean exitMenu() {
+		System.out.println("\n\nQuiting...");
+		return true;
+	}
+
+	private int getOperation() {
+		
+		printOperations();
+		
+		Integer sel = getIntInput("Enter a selection (Enter to quit):");
+		
+		return Objects.isNull(sel) ? -1 : sel;
+		
+	}
+	
+	private void printOperations() {
+		
+		System.out.println("\nOptions:");
+		
+		operations.forEach(op -> System.out.println(op));
+		
+	}
+	
+	private Integer getIntInput(String prompt) {
+		
+		String in = getStringInput(prompt);
+		
+		if(Objects.isNull(in)) {
+			return null;
+		}
 		
 		try {
-		
-			Integer sel = getIntIn("\nEnter Selection (Enter to Quit): ");
-			
-			sel = (Objects.isNull(sel) ? -1 : sel);
-			
-			processSelection(sel);
-		
-		} catch (Exception e) {
-			System.out.println("\nInvalid Selection!");
-			e.printStackTrace();
-			System.out.println();
+			return Integer.parseInt(in);
+		} catch (NumberFormatException e) {
+			throw new DbException(in + " is not a valid number");
 		}
 		
 	}
 	
-	public void processSelection(int sel) {
+	private Double getDoubleInput(String prompt) {
 		
-		switch(sel) {
-		
-		case -1:
-			done = true;
-			break;
-			
-		default:
-			System.out.println("\nInvalid Input!");
-			break;
-			
-		case 1:
-			createProject();
-			break;
-			
-		case 2:
-			listProjects();
-			break;
-			
-		case 3:
-			selectProject();
-			break;
-			
-		case 4:
-			updateProject();
-			break;
-			
-		case 5:
-			deleteProject();
-			break;
-		
-		}
-		
-	}
-	
-	private void deleteProject() {
-		
-		listProjects();
-		
-		Integer id = getIntIn("Select a Project to Delete\nEnter ID: ");
-		
-		ps.deleteProject(id);
-		
-	}
-
-	private void updateProject() {
-		
-		if(Objects.isNull(curProject)) {
-			System.out.println("\nNo Project Currently Selected!\nPlease Select One.\n");
-		}
-		
-		System.out.println("Enter a New Value Otherwise Press Enter to Leave Unchanged\n");
-		
-		String name = getStringIn("Enter Project Name [" + curProject.getProjectName() + "]:");
-		BigDecimal estHours = getDecimalIn("Enter Estimated Hours [" + curProject.getEstimatedHours()+ "]:");
-		BigDecimal actHours = getDecimalIn("Enter Actual Hours [" + curProject.getActualHours() + "]:");
-		Integer diff = getIntIn("Enter the Project's Difficulty (1-5) [" + curProject.getDifficulty() + "]:");
-		String notes = getStringIn("Enter Project Notes [" + curProject.getNotes() + "]:");
-		
-		Project p = new Project();
-		
-		p.setProjectName(Objects.isNull(name) ? curProject.getProjectName() : name);
-		p.setEstimatedHours(Objects.isNull(estHours) ? curProject.getEstimatedHours() : estHours);
-		p.setActualHours(Objects.isNull(actHours) ? curProject.getEstimatedHours() : actHours);
-		p.setDifficulty(Objects.isNull(diff) ? curProject.getDifficulty() : diff);
-		p.setNotes(Objects.isNull(notes) ? curProject.getNotes() : notes);
-		
-		p.setProjectId(curProject.getProjectId());
-		
-		ps.modifyProject(p);
-		
-	}
-
-	private void selectProject() {
-		listProjects();
-		
-		Integer id = getIntIn("Enter Project ID: ");
-		curProject = null;
-		
-		curProject = ps.getProjectById(id);
-		
-		if(Objects.isNull(curProject)) {
-			System.out.println("Invaild ID Selected!");
-		} else {
-			System.out.println("Selected Project: " + curProject);
-		}
-		
-	}
-
-	private void listProjects() {
-		
-		List<Project> p = ps.getProjects();
-		
-		System.out.println("\nProjects:");
-		p.forEach(project -> System.out.println(project.getProjectId() + ". " + project.getProjectName()));
-		System.out.println();
-		
-	}
-
-	private void createProject() {
-		
-		String name = getStringIn("Enter Project Name: ");
-		BigDecimal estHours = getDecimalIn("Enter Estimated Hours: ");
-		BigDecimal actHours = getDecimalIn("Enter Actual Hours: ");
-		Integer diff = getIntIn("Enter the Project's Difficulty (1-5): ");
-		String notes = getStringIn("Enter Project Notes: ");
-		
-		Project p = new Project();
-		
-		p.setProjectName(name);
-		p.setEstimatedHours(estHours);
-		p.setActualHours(actHours);
-		p.setDifficulty(diff);
-		p.setNotes(notes);
-		
-		Project p2 = ps.addProject(p);
-		System.out.println("Successfully Made: " + p2);
-		
-	}
-
-	private BigDecimal getDecimalIn(String s) {
-		String in = getStringIn(s);
+		String in = getStringInput(prompt);
 		
 		if(Objects.isNull(in)) {
 			return null;
 		}
 		
-		return new BigDecimal(in).setScale(2);
-	}
-
-	public String getStringIn(String s) {
-		
-		System.out.print(s);
-		
-		String s1 = sc.nextLine();
-		
-		return ( s1.isBlank() ? null : s1.trim());
-		
-	}
-	
-	public Integer getIntIn(String s) {
-		
-		String in = getStringIn(s);
-		
-		if(Objects.isNull(in)) {
-			return null;
+		try {
+			return Double.parseDouble(in);
+		} catch (NumberFormatException e) {
+			throw new DbException(in + " is not a valid number");
 		}
 		
-		Integer x = Integer.parseInt(in);
-			
-		return x;
+	}
+
+	private String getStringInput(String prompt) {
+		
+		System.out.println(prompt);
+		
+		String line = s.nextLine();
+		
+		return line.isBlank() ? null : line.trim();
 		
 	}
+
 
 }
